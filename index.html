@@ -1,0 +1,603 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#1F2D5A">
+    <title>Walking tour</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+    <style>
+        :root {
+            color-scheme: light;
+            --navy: #1F2D5A;
+            --gold: #DCBD23;
+            --cream: #FBEBD0;
+            --white: #fff;
+            --focus: #155eef;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+        }
+
+        body {
+            color: var(--navy);
+            background: var(--cream);
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        }
+
+        button,
+        a {
+            font: inherit;
+        }
+
+        button:focus-visible,
+        a:focus-visible,
+        .leaflet-marker-icon:focus-visible {
+            outline: 3px solid var(--focus);
+            outline-offset: 3px;
+        }
+
+        .app {
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            height: 100vh;
+            height: 100dvh;
+            min-height: 0;
+        }
+
+        #map {
+            flex: 1 1 auto;
+            min-height: 40vh;
+            background: #e8e4da;
+        }
+
+        .panel {
+            flex: 0 1 auto;
+            max-height: 52vh;
+            overflow-y: auto;
+            padding: 1rem;
+            padding-bottom: max(1rem, env(safe-area-inset-bottom));
+            background: var(--cream);
+            box-shadow: 0 -3px 14px rgb(31 45 90 / 15%);
+        }
+
+        .panel-inner {
+            width: min(100%, 48rem);
+            margin: 0 auto;
+        }
+
+        h1 {
+            margin: 0;
+            color: var(--navy);
+            font-size: clamp(1.25rem, 5vw, 1.65rem);
+            line-height: 1.2;
+        }
+
+        .intro {
+            margin: 0.4rem 0 1rem;
+            line-height: 1.45;
+        }
+
+        h2 {
+            margin: 0 0 0.5rem;
+            font-size: 1.15rem;
+            line-height: 1.3;
+        }
+
+        .stop-text,
+        .directions {
+            margin: 0.45rem 0;
+            line-height: 1.5;
+            overflow-wrap: anywhere;
+        }
+
+        .directions {
+            white-space: pre-line;
+        }
+
+        .directions-label {
+            margin: 0.9rem 0 0.2rem;
+            font-size: 0.9rem;
+            font-weight: 700;
+        }
+
+        .no-location,
+        .location-message {
+            margin: 0.7rem 0 0;
+            line-height: 1.4;
+        }
+
+        .no-location {
+            padding: 0.65rem 0.75rem;
+            border-left: 4px solid var(--gold);
+            background: rgb(220 189 35 / 18%);
+            font-weight: 600;
+        }
+
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.6rem;
+            margin-top: 1rem;
+        }
+
+        .control {
+            display: inline-flex;
+            flex: 1 1 8rem;
+            align-items: center;
+            justify-content: center;
+            min-width: 6rem;
+            min-height: 48px;
+            padding: 0.65rem 0.9rem;
+            border: 2px solid var(--navy);
+            border-radius: 0.55rem;
+            color: var(--white);
+            background: var(--navy);
+            font-weight: 700;
+            text-align: center;
+            text-decoration: none;
+            cursor: pointer;
+            touch-action: manipulation;
+        }
+
+        .control:hover:not(:disabled) {
+            background: #2d407c;
+        }
+
+        .control:disabled {
+            color: var(--navy);
+            background: transparent;
+            cursor: not-allowed;
+            opacity: 0.65;
+        }
+
+        .control.secondary {
+            color: var(--navy);
+            background: transparent;
+        }
+
+        .control.secondary:hover {
+            background: rgb(31 45 90 / 8%);
+        }
+
+        [hidden] {
+            display: none !important;
+        }
+
+        .stop-marker {
+            display: flex;
+            width: 38px;
+            height: 38px;
+            align-items: center;
+            justify-content: center;
+            border: 3px solid var(--white);
+            border-radius: 50%;
+            color: var(--navy);
+            background: var(--gold);
+            box-shadow: 0 1px 5px rgb(0 0 0 / 45%);
+            font-size: 1rem;
+            font-weight: 800;
+            transition: transform 120ms ease, background-color 120ms ease;
+        }
+
+        .stop-marker.is-selected {
+            color: var(--white);
+            background: var(--navy);
+            transform: scale(1.15);
+        }
+
+        @media (max-width: 420px) {
+            .panel {
+                padding: 0.85rem;
+                padding-bottom: max(0.85rem, env(safe-area-inset-bottom));
+            }
+
+            .control {
+                flex-basis: calc(50% - 0.6rem);
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+
+            *,
+            *::before,
+            *::after {
+                scroll-behavior: auto !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <main class="app">
+        <div id="map" role="region" aria-label="Walking tour map"></div>
+
+        <section class="panel" aria-label="Walking tour stops">
+            <div class="panel-inner">
+                <h1 id="tour-title"></h1>
+                <p id="tour-intro" class="intro"></p>
+
+                <h2 id="stop-heading" aria-live="polite"></h2>
+                <p id="stop-text" class="stop-text"></p>
+                <p id="no-location" class="no-location" role="status" hidden>
+                    This stop has no map location yet.
+                </p>
+
+                <p class="directions-label">Directions to the next stop</p>
+                <p id="stop-directions" class="directions"></p>
+                <p id="route-status" class="location-message" role="status" aria-live="polite"></p>
+
+                <div class="controls" aria-label="Tour controls">
+                    <button id="back-button" class="control secondary" type="button">Back</button>
+                    <button id="next-button" class="control" type="button">Next stop</button>
+                    <a id="maps-link" class="control secondary" href="#" target="_blank" rel="noopener noreferrer"
+                        aria-label="Open this stop in OpenStreetMap" hidden>Open in Maps</a>
+                    <button id="location-button" class="control secondary" type="button">
+                        Show my location
+                    </button>
+                </div>
+                <p id="location-message" class="location-message" role="status" aria-live="polite"></p>
+            </div>
+        </section>
+    </main>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+    <script>
+        // Editable tour content: only TITLE, INTRO, and STOPS need editing.
+        // Open this file over HTTPS (for example, on GitHub Pages) for map tiles and location to work.
+        const TITLE = "Montreal Walking Tour";
+        const INTRO = "Follow the stops in order. Select a numbered marker or use the buttons to move through the tour.";
+
+        const STOPS = [
+            {
+                name: "Start: the Hall Building",
+                lat: 45.4972,
+                lon: -73.5790,
+                text: "Placeholder: begin the walking tour at the Hall Building.",
+                directions: "Placeholder: walk to Poulet Rouge for the next stop."
+            },
+            {
+                name: "Poulet Rouge",
+                lat: 45.4938,
+                lon: -73.5794,
+                text: "Poulet Rouge is a Montreal fast-casual restaurant known for customizable grilled chicken bowls. Choose a base, toppings, and sauces to make a meal that suits your taste.",
+                directions: "Placeholder: continue to Bei. Add directions once its address is confirmed."
+            },
+            {
+                name: "Bei",
+                lat: 45.496386,
+                lon: -73.578432,
+                text: "Bei is a downtown Lebanese restaurant known for shawarma and other Lebanese-inspired dishes. Stop in for bold, savory flavors and a casual meal near the Hall Building.",
+                directions: "Placeholder: return to the Hall Building."
+            },
+            {
+                name: "Back at the Hall Building",
+                lat: 45.4972,
+                lon: -73.5790,
+                text: "Placeholder: the walking tour returns to the Hall Building.",
+                directions: "The tour ends here."
+            }
+        ];
+
+        document.title = TITLE;
+        document.getElementById("tour-title").textContent = TITLE;
+        document.getElementById("tour-intro").textContent = INTRO;
+
+        const map = L.map("map", {
+            scrollWheelZoom: false
+        });
+
+        L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            maxZoom: 19,
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        let selectedIndex = 0;
+        let userLocationMarker = null;
+
+        const markers = new Map();
+        const walkingRouteLayers = new Map();
+        const walkingDirections = new Map();
+        const mappedStops = STOPS
+            .map((stop, index) => ({ stop, index }))
+            .filter(({ stop }) =>
+                Number.isFinite(stop.lat) && Number.isFinite(stop.lon)
+            );
+
+        function makeStopIcon(index, isSelected) {
+            const badge = document.createElement("span");
+            badge.className = `stop-marker${isSelected ? " is-selected" : ""}`;
+            badge.textContent = String(index + 1);
+
+            return L.divIcon({
+                className: "",
+                html: badge,
+                iconSize: [38, 38],
+                iconAnchor: [19, 19]
+            });
+        }
+
+        mappedStops.forEach(({ stop, index }) => {
+            const marker = L.marker([stop.lat, stop.lon], {
+                icon: makeStopIcon(index, index === selectedIndex),
+                title: `Stop ${index + 1}: ${stop.name}`,
+                alt: `Stop ${index + 1}: ${stop.name}`,
+                keyboard: true
+            }).addTo(map);
+
+            marker.on("click", () => selectStop(index));
+            markers.set(index, marker);
+        });
+
+        if (mappedStops.length > 1) {
+            const bounds = L.latLngBounds(
+                mappedStops.map(({ stop }) => [stop.lat, stop.lon])
+            );
+            map.fitBounds(bounds, { padding: [36, 36], maxZoom: 16 });
+        } else if (mappedStops.length === 1) {
+            const { stop } = mappedStops[0];
+            map.setView([stop.lat, stop.lon], 16);
+        } else {
+            map.setView([45.4972, -73.5790], 15);
+        }
+
+        const heading = document.getElementById("stop-heading");
+        const stopText = document.getElementById("stop-text");
+        const directions = document.getElementById("stop-directions");
+        const noLocation = document.getElementById("no-location");
+        const backButton = document.getElementById("back-button");
+        const nextButton = document.getElementById("next-button");
+        const mapsLink = document.getElementById("maps-link");
+        const locationMessage = document.getElementById("location-message");
+        const routeStatus = document.getElementById("route-status");
+
+        function formatDistance(meters) {
+            if (meters < 1000) {
+                return `${Math.max(10, Math.round(meters / 10) * 10)} m`;
+            }
+            return `${(meters / 1000).toFixed(1)} km`;
+        }
+
+        function formatManeuver(step, destinationName) {
+            const maneuver = step.maneuver || {};
+            const modifier = (maneuver.modifier || "").replaceAll("_", " ");
+            let action;
+
+            switch (maneuver.type) {
+                case "depart":
+                    action = "Start walking";
+                    break;
+                case "arrive":
+                    action = `Arrive at ${destinationName}`;
+                    break;
+                case "turn":
+                    action = modifier ? `Turn ${modifier}` : "Turn";
+                    break;
+                case "fork":
+                    action = modifier === "straight"
+                        ? "Continue straight"
+                        : modifier ? `Keep ${modifier}` : "Follow the fork";
+                    break;
+                case "continue":
+                case "new name":
+                    action = modifier && modifier !== "straight"
+                        ? `Continue ${modifier}`
+                        : "Continue straight";
+                    break;
+                case "roundabout":
+                case "rotary":
+                    action = maneuver.exit
+                        ? `At the roundabout, take exit ${maneuver.exit}`
+                        : "Continue through the roundabout";
+                    break;
+                case "end of road":
+                    action = modifier
+                        ? `At the end of the road, turn ${modifier}`
+                        : "Continue at the end of the road";
+                    break;
+                case "merge":
+                    action = "Merge";
+                    break;
+                case "on ramp":
+                    action = "Take the ramp";
+                    break;
+                case "off ramp":
+                    action = "Leave the ramp";
+                    break;
+                default:
+                    action = modifier ? `Continue ${modifier}` : "Continue straight";
+            }
+
+            const street = step.name && maneuver.type !== "arrive"
+                ? `${["depart", "continue", "new name"].includes(maneuver.type) ||
+                    (maneuver.type === "fork" && modifier === "straight") ? " on " : " onto "}${step.name}`
+                : "";
+            const distance = step.distance > 0 ? ` (${formatDistance(step.distance)})` : "";
+            return `${action}${street}${distance}.`;
+        }
+
+        async function loadWalkingRoutes() {
+            const routableLegs = STOPS.slice(0, -1)
+                .map((from, index) => ({ from, to: STOPS[index + 1], index }))
+                .filter(({ from, to }) =>
+                    Number.isFinite(from.lat) && Number.isFinite(from.lon) &&
+                    Number.isFinite(to.lat) && Number.isFinite(to.lon)
+                );
+
+            if (routableLegs.length === 0) {
+                routeStatus.textContent = "Add coordinates to adjacent stops to show street walking routes.";
+                return;
+            }
+
+            routeStatus.textContent = "Loading walking routes along streets…";
+            let routedLegCount = 0;
+            let failedLegCount = 0;
+
+            // This public OSRM-compatible service uses OpenStreetMap data and a pedestrian routing graph.
+            for (const { from, to, index } of routableLegs) {
+                const coordinates = `${from.lon},${from.lat};${to.lon},${to.lat}`;
+                const url =
+                    `https://routing.openstreetmap.de/routed-foot/route/v1/driving/${coordinates}` +
+                    "?overview=full&geometries=geojson&steps=true";
+
+                try {
+                    const response = await fetch(url, {
+                        headers: { Accept: "application/json" }
+                    });
+                    if (!response.ok) {
+                        throw new Error(`Routing service returned ${response.status}`);
+                    }
+
+                    const result = await response.json();
+                    const route = result.routes && result.routes[0];
+                    const leg = route && route.legs && route.legs[0];
+                    if (!route || !leg || !route.geometry || !route.geometry.coordinates.length) {
+                        throw new Error("No walking route was returned");
+                    }
+
+                    const path = route.geometry.coordinates.map(([lon, lat]) => [lat, lon]);
+                    const routeLayer = L.polyline(path, {
+                        color: "#1F2D5A",
+                        weight: 5,
+                        opacity: 0.88,
+                        dashArray: "9 7"
+                    }).addTo(map);
+                    walkingRouteLayers.set(index, routeLayer);
+
+                    const steps = (leg.steps || [])
+                        .map((step) => formatManeuver(step, to.name));
+                    walkingDirections.set(index, `Walk to ${to.name}:\n${steps.join("\n")}`);
+                    routedLegCount += 1;
+
+                    if (selectedIndex === index) {
+                        directions.textContent = walkingDirections.get(index);
+                    }
+                } catch (error) {
+                    failedLegCount += 1;
+                    console.warn(`Could not load walking route to ${to.name}:`, error);
+                }
+            }
+
+            if (failedLegCount === 0) {
+                routeStatus.textContent = "Street-level walking routes are shown on the map.";
+            } else if (routedLegCount > 0) {
+                routeStatus.textContent = "Some walking routes could not be loaded; available street routes are shown.";
+            } else {
+                routeStatus.textContent = "Street routes could not be loaded. Stop locations are still shown.";
+            }
+        }
+
+        function selectStop(index) {
+            selectedIndex = index;
+            const stop = STOPS[index];
+
+            heading.textContent = `${index + 1}. ${stop.name}`;
+            stopText.textContent = stop.text;
+            directions.textContent = walkingDirections.get(index) || stop.directions;
+            noLocation.hidden = Number.isFinite(stop.lat) && Number.isFinite(stop.lon);
+            backButton.disabled = index === 0;
+            nextButton.textContent = index === STOPS.length - 1 ? "Finished" : "Next stop";
+            nextButton.disabled = index === STOPS.length - 1;
+
+            if (Number.isFinite(stop.lat) && Number.isFinite(stop.lon)) {
+                mapsLink.href =
+                    `https://www.openstreetmap.org/?mlat=${stop.lat}&mlon=${stop.lon}` +
+                    `#map=17/${stop.lat}/${stop.lon}`;
+                mapsLink.hidden = false;
+            } else {
+                mapsLink.removeAttribute("href");
+                mapsLink.hidden = true;
+            }
+
+            markers.forEach((marker, markerIndex) => {
+                marker.setIcon(makeStopIcon(markerIndex, markerIndex === index));
+                marker.setZIndexOffset(markerIndex === index ? 1000 : 0);
+            });
+        }
+
+        backButton.addEventListener("click", () => {
+            if (selectedIndex > 0) {
+                selectStop(selectedIndex - 1);
+            }
+        });
+
+        nextButton.addEventListener("click", () => {
+            if (selectedIndex < STOPS.length - 1) {
+                selectStop(selectedIndex + 1);
+            }
+        });
+
+        document.getElementById("location-button").addEventListener("click", () => {
+            locationMessage.textContent = "";
+
+            if (window.location.protocol !== "https:") {
+                locationMessage.textContent =
+                    "Location needs a secure HTTPS page. Open this tour on GitHub Pages.";
+                return;
+            }
+
+            if (!("geolocation" in navigator)) {
+                locationMessage.textContent =
+                    "Location is not available in this browser.";
+                return;
+            }
+
+            locationMessage.textContent = "Getting your location…";
+
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const { latitude, longitude } = position.coords;
+
+                    if (userLocationMarker) {
+                        map.removeLayer(userLocationMarker);
+                    }
+
+                    userLocationMarker = L.circleMarker([latitude, longitude], {
+                        radius: 9,
+                        color: "#ffffff",
+                        weight: 3,
+                        fillColor: "#1677ff",
+                        fillOpacity: 1
+                    }).addTo(map);
+
+                    userLocationMarker.bindTooltip("Your location");
+                    map.setView([latitude, longitude], Math.max(map.getZoom(), 16));
+                    locationMessage.textContent = "Your location is shown on the map.";
+                },
+                (error) => {
+                    if (error.code === error.PERMISSION_DENIED) {
+                        locationMessage.textContent =
+                            "Location permission was denied. Allow it in your browser settings to see your location.";
+                    } else if (error.code === error.POSITION_UNAVAILABLE) {
+                        locationMessage.textContent =
+                            "Your location could not be determined. Try again in a moment.";
+                    } else {
+                        locationMessage.textContent =
+                            "Location request timed out. Please try again.";
+                    }
+                },
+                {
+                    enableHighAccuracy: true,
+                    timeout: 10000,
+                    maximumAge: 30000
+                }
+            );
+        });
+
+        selectStop(selectedIndex);
+        loadWalkingRoutes();
+    </script>
+</body>
+
+</html>
